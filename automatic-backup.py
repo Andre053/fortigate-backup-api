@@ -2,30 +2,54 @@ import os
 import csv
 import sys
 import requests
+import smtplib
+from email.message import EmailMessage
 from datetime import datetime
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 # The req object is used to make https requests
 req = requests.session()
 
 # Uncomment these two lines below to disable SSL certificate warnings
-# requests.packages.urllib3.disable_warnings()
-# req.verify = False
+requests.packages.urllib3.disable_warnings()
+req.verify = False
 
 # Global variables
 DATE = datetime.now().strftime('%m-%d-%Y')      # Today's date in the format mm-dd-yyyy
-CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))   # Path to the directory where this script is located
-BKP_FOLDER = os.path.join(CURRENT_DIR, 'backups', DATE)     # Path to the backups folder
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__)) 					# PATH to current directory, used for getting csv
+HOME_DIR = os.path.expanduser('~')   				# Path to the home directory
+BKP_FOLDER = os.path.join(HOME_DIR, 'backups')     # Path to the backups folder
 LOGS_FOLDER = os.path.join(CURRENT_DIR, 'logs')     # Path to the logs folder
 online_ip, error_message = '',''
 bkp_fail = []
 
-def main():
+# using sendgrid api 
+def email(recepient, subject, content, log):
 
-    # Read the fortigates.csv file
+    EMAIL_FROM = os.genenv("EMAIL_FROM")
+    API_KEY = os.genenv("MAIL_API_KEY")
+
+    message = Mail(
+      from_email=EMAIL_FROM,
+      to_emails=recepient,
+      subject=subject,
+      html_content=content)
+    try:
+      sg = SendGridAPIClient(API_KEY)
+      response = sg.send(message)
+      log.write("Sent email of failed backups\n")
+    except Exception as e:
+      log.write(e.message)
+
+def main():
+    
+    EMAIL_TO = os.getenv("EMAIL_TO")
+
     fortigates = read_fortigates()
     
     # Create folders for backups and logs if they don't exist
-    create_folders()
+    create_folders(LOGS_FOLDER)
 
     # Create log file
     log = create_log()
@@ -39,12 +63,11 @@ def main():
         error_message = ''
         
         print('\n========================================')
-        print(f'Fortigate: {fgt["name"]}')
+        print(f'Fortigate: {fgt["company"]} {fgt["name"]}')
 
         log.write('\n========================================\n')
-        log.write(f'Fortigate: {fgt["name"]}\n')
+        log.write(f'Fortigate: {fgt["company"]} {fgt["name"]}\n')
         
-        # Call the main backup function
         bkp_ok = backup(fgt)
 
         # Check if the backup was successful
@@ -80,6 +103,8 @@ def main():
         
         print(f'\nCount: {len(bkp_fail)}\n')
         log.write(f'\nCount: {len(bkp_fail)}\n')
+				# email list of failed backups				
+        email(EMAIL_TO, "[ERROR] FortiGate Backups", f"Backup failed for devices: {bkp_fail}", log)
 
     log.close()
     print('Backup finished!')
@@ -103,13 +128,12 @@ def read_fortigates():
 
     return fortigates
 
-def create_folders():
+def create_folders(path):
 
     try:
         # Create the backups and logs folders if they don't exist
         # exist_ok=True prevents the function from raising an exception if the folder already exists
-        os.makedirs(BKP_FOLDER, exist_ok=True)
-        os.makedirs(LOGS_FOLDER, exist_ok=True)
+        os.makedirs(path, exist_ok=True)
     except Exception as e:
         print(f'Error creating folders: {e}')
         input('Press ENTER to exit...')
@@ -141,7 +165,7 @@ def backup(fgt):
         return False
 
     # Save and check the backup file
-    file_ok = save_and_check_file(fgt['name'], bkp_data)
+    file_ok = save_and_check_file(fgt['company'], fgt['name'], bkp_data)
     return file_ok
 
 def ping(ip):
@@ -185,14 +209,16 @@ def mount_url(fgt):
     else:
         return ''
     
-def save_and_check_file(name, data):
+def save_and_check_file(company, name, data):
 
     # Access the global variable error_message
     global error_message
 
     # Path to the backup file
-    file_path = os.path.join(BKP_FOLDER, f'{name}-bkp-{DATE}.conf')
-    
+    folder_path = os.path.join(BKP_FOLDER, company, name, "daily", DATE)
+		
+    create_folders(folder_path)
+    file_path = os.path.join(folder_path, f'{name}-bkp={DATE}.conf')
     try:
         # Save the backup data to a file
         with open(file_path, 'wb') as file:
