@@ -7,7 +7,7 @@ from datetime import datetime
 # for each company, each device
 # save last 7 days, last 4 weeks, last 4 months, last 2 semi-anually, last year
 
-LOG_DIRECTORY = os.path.join(os.getcwd(), "retention_logs")
+LOG_DIRECTORY = os.path.join(os.path.expanduser("~"), "programs/fortigate-backup-api/retention_logs")
 BACKUP_FOLDER = os.path.join(os.path.expanduser("~"), "backups")
 DATE = datetime.now().strftime('%m-%d-%Y') # get current date script is being run
 
@@ -41,22 +41,22 @@ def main():
             yearly_backup_count = len(yearly_backups)
 
             # take the weekly backup, get the oldest backup
-            if daily_backup_count > 7:
+            if daily_backup_count > 14:
                 log.write(f"Daily backup full for {c} {dev}\n")
-                retend_move(daily_path, weekly_path)
+                retend_move(daily_path, weekly_path, 7)
 
             if weekly_backup_count > 4:
                 log.write(f"Weekly backup full for {c} {dev}\n")
-                retend_move(weekly_path, monthly_path)
+                retend_move(weekly_path, monthly_path, None)
 
             if monthly_backup_count > 12:
                 log.write(f"Monthly backup full for {c} {dev}\n")
-                retend_move(monthly_path, yearly_path)
+                retend_move(monthly_path, yearly_path, None)
             if yearly_backup_count > 3:
                 log.write(f"Yearly backup over 3 for {c} {dev}\n")
     
 # moves newest file to dst
-def retend_move(src, dst):
+def retend_move(src, dst, dlt_count):
     
     # files map uses time as key, tuple with (file, file_dir)
     files_map, times = get_files_and_timestamps(src)
@@ -64,6 +64,11 @@ def retend_move(src, dst):
     to_delete = [files_map[time][0] for time in times[1:]] # ignore the first file
     to_delete_dirs = [files_map[time][1] for time in times[1:]] # ignore the first file
     to_move = [files_map[times[0]][1]] # want to move the whole directory
+    if dlt_count != None:
+        to_delete = to_delete[dlt_count:]
+        to_delete_dirs = to_delete_dirs[dlt_count:]
+        to_move = [files_map[times[dlt_count]][1]]
+
     move_files(to_move, dst)
     delete_files(to_delete)
     delete_dirs(to_delete_dirs)
