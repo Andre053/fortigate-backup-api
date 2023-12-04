@@ -18,7 +18,7 @@ req.verify = False
 # Global variables
 DATE = datetime.now().strftime('%m-%d-%Y')      # Today's date in the format mm-dd-yyyy
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__)) 					# PATH to current directory, used for getting csv
-HOME_DIR = os.path.expanduser('~')   				# Path to the home directory
+HOME_DIR = "/home/shared"   				# Path to the home directory
 BKP_FOLDER = os.path.join(HOME_DIR, 'backups')     # Path to the backups folder
 LOGS_FOLDER = os.path.join(CURRENT_DIR, 'logs')     # Path to the logs folder
 online_ip, error_message = '',''
